@@ -15,6 +15,19 @@ class Caregiver:
 
     # getters
     def get(self):
+        """
+        Get the caregiver with that matches the Username and
+        Salt and Hash
+        
+        Parameters
+        ----------
+        self : Caregiver object
+            fields:
+                - username
+                - password
+                - salt
+                - hash
+        """
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor(as_dict=True)
@@ -24,7 +37,7 @@ class Caregiver:
             cursor.execute(get_caregiver_details, self.username)
             for row in cursor:
                 curr_salt = row['Salt']
-                curr_hash = row['Hash']
+                curr_hash = row['Hash'] # stored hash
                 calculated_hash = Util.generate_hash(self.password, curr_salt)
                 if not curr_hash == calculated_hash:
                     cm.close_connection()
@@ -41,15 +54,46 @@ class Caregiver:
         return None
 
     def get_username(self):
+        """
+        Returns the username of the caregiver
+        object.
+
+        Returns
+        -------
+        str
+            The caregiver username
+        """
         return self.username
 
     def get_salt(self):
+        """
+        Returns the salt of the caregiver
+        object.
+
+        Returns
+        -------
+        str
+            The caregiver salt
+        """
         return self.salt
 
     def get_hash(self):
+        """
+        Returns the hash of the caregiver
+        object.
+
+        Returns
+        -------
+        str
+            The caregiver hash
+        """
         return self.hash
 
     def save_to_db(self):
+        """
+        Saves the current caregiver object into
+        the Caregivers table in the database.
+        """
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor()
@@ -68,6 +112,15 @@ class Caregiver:
 
     # Insert availability with parameter date d
     def upload_availability(self, d):
+        """
+        Uploads the availability of the Caregiver
+        into the Availabilities Table in the database.
+
+        Parameters
+        ----------
+        d : str
+            Date time string of the format 'yyyy-mm-dd'.
+        """
         cm = ConnectionManager()
         conn = cm.create_connection()
         cursor = conn.cursor()

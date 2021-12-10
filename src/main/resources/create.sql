@@ -1,21 +1,16 @@
--- Creating User table
-CREATE TABLE Users (
+-- Creating Caregivers table
+CREATE TABLE Caregivers (
     Username varchar(255),
-    Name varchar(50),
     Salt BINARY(16),
     Hash BINARY(16),
     PRIMARY KEY (Username)
 );
 
--- Creating Caregivers table
-CREATE TABLE Caregivers (
-    Username varchar(255) REFERENCES Users,
-    PRIMARY KEY (Username)
-);
-
 -- Creating Patients table
 CREATE TABLE Patients (
-    Username varchar(255) REFERENCES Users,
+    Username varchar(255),
+    Salt BINARY(16),
+    Hash BINARY(16),
     PRIMARY KEY (Username)
 );
 
@@ -40,4 +35,5 @@ CREATE TABLE Appointments (
     c_username varchar(255) REFERENCES Caregivers(Username),
     vac_name varchar(255) REFERENCES Vaccines(Name),
     Time date
+    PRIMARY KEY (appointment_id)
 );
