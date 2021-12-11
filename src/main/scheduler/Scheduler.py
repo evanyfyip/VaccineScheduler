@@ -179,6 +179,38 @@ def username_exists_caregiver(username):
     cm.close_connection()
     return False
 
+def check_login(user, current_patient, current_caregiver):
+    """
+    Checks if the current user is logged
+    in as a patient, caregiver or either.
+    Returns a True if they are logged in, 
+    else returns False.
+
+    Parameters
+    ----------
+    user : str
+        The type of user to check if logged in.
+        Possible values include 'patient', 'caregiver',
+        'any'.
+    
+    Returns
+    -------
+    status : bool
+        returns true if the given user is logged in.
+    """
+    # global current_caregiver
+    # global current_patient
+    possible_inputs = ['patient', 'caregiver', 'any']
+    if user in possible_inputs:
+        if user == 'patient':
+            return current_patient is not None
+        elif user == 'caregiver':
+            return current_caregiver is not None
+        elif user == 'any':
+            return current_patient is not None or current_caregiver is not None
+    else:
+        print("User type not defined")
+        return
 
 def login_patient(tokens):
     """
@@ -195,7 +227,7 @@ def login_patient(tokens):
     # check 1: if someone's already logged-in, they need to log out first
     global current_caregiver
     global current_patient
-    if current_caregiver is not None or current_patient is not None:
+    if check_login('any', current_patient, current_caregiver):
         print("Already logged-in!")
         return
 
@@ -242,7 +274,7 @@ def login_caregiver(tokens):
     # check 1: if someone's already logged-in, they need to log out first
     global current_caregiver
     global current_patient
-    if current_caregiver is not None or current_patient is not None:
+    if check_login('any', current_patient, current_caregiver):
         print("Already logged-in!")
         return
 
@@ -288,9 +320,9 @@ def search_caregiver_schedule(tokens):
     """
     # Check 1: make sure the user is logged in as either a patient
     # or a caregiver
-    global current_patient
     global current_caregiver
-    if current_patient is None and current_caregiver is None:
+    global current_patient
+    if not check_login('any', current_patient, current_caregiver):
         print("Please login first!")
         return
     # Check 2: make sure the length of tokens matches the desired parameter
@@ -303,7 +335,6 @@ def search_caregiver_schedule(tokens):
     # Extracting information from token
     date = tokens[1]
     # Check 3: make sure the date string is in the correct format 'mm-dd-yyyy'
-    # TODO: provide flexible formatting for date
     if check_date_format(date) is False:
         return
 
@@ -343,9 +374,9 @@ def show_availabilities():
     """
     # Check 1: make sure the user is logged in as either a patient
     # or a caregiver
-    global current_patient
     global current_caregiver
-    if current_patient is None and current_caregiver is None:
+    global current_patient
+    if not check_login('any', current_patient, current_caregiver):
         print("Please login first!")
         return
 
@@ -367,7 +398,6 @@ def show_availabilities():
         cm.close_connection()
     cm.close_connection()
 
-# TODO: Write a check login function to call
 def reformat_date(date_string, inverse=False):
     """
     Reformats the datestring from 
@@ -441,27 +471,22 @@ def show_doses():
         cursor = conn.cursor(as_dict=True)
         cursor.execute(select_doses)
         # outputing the vaccine name along with doses available
-        # TODO: Refactor using Tabulate
         print("Available Vaccines:")
-        print("+---------+---------+")
-        print('|NAME     |DOSES    |')
-        print("+---------+---------+")
+        headers = ['NAME', 'DOSES']
         cols = ['Name', 'Doses']
+        table = []
         for vaccine in cursor:
-            row = "|"
+            row = []
             for colname in cols:
                 val = str(vaccine[colname])
-                spaces = ''.join(' ' for _ in range(9 - len(val)))
-                row += val + spaces + '|'
-            print(row)
-        print("+---------+---------+")
+                row.append(val)
+            table.append(row)
+        print(tabulate(table, headers, tablefmt="pretty"))
     except pymssql.Error:
         print("Error occurred when getting current doses")
         cm.close_connection()
         return
     cm.close_connection()
-
-
 
 def reserve(tokens):
     """
@@ -483,9 +508,10 @@ def reserve(tokens):
     # basic functionality
     # Check 1: make sure the user is logged in as either a patient
     # or a caregiver
+    global current_caregiver
     global current_patient
-    if current_patient is None:
-        print("Please login as a patient!")
+    if not check_login('patient', current_patient, current_caregiver):
+        print("Please login as a patient")
         return
     # Check 2: make sure the length of tokens matches the desired parameter
     #   length
@@ -537,6 +563,8 @@ def reserve(tokens):
                 cursor.execute(insert_appointment, (app_id, current_patient.username, rand_caregiver, vac_name, re_date))
         except pymssql.Error:
             print("Error occured when trying to insert appointment")
+            conn.rollback()
+            cm.close_connection()
             return
         # Remove availability from caregiver
         try:
@@ -545,18 +573,17 @@ def reserve(tokens):
                 cursor.execute(remove_availability, (rand_caregiver, re_date))
         except pymssql.Error:
             print("Error occured when updating caregiver availabilities")
+            conn.rollback()
+            cm.close_connection()
             return
         print("Successfully created appointment!")
         print("Your appointment details:")
         headers = ["Appointment ID", "Date", "Caregiver", "Vaccine"]
         table = [[app_id, date, rand_caregiver, vac_name]]
         print(tabulate(table, headers, tablefmt="pretty"))
-        # print("Appointment ID:", app_id)
-        # print("Date:", date)
-        # print("Caregiver:", rand_caregiver)
-        # print("Vaccine:", vac_name)
     except pymssql.Error:
         print("Error occurred when reserving appointment")
+        conn.rollback()
         cm.close_connection()
         return
     conn.commit()
@@ -604,8 +631,9 @@ def upload_availability(tokens):
     #  upload_availability <date>
     #  check 1: check if the current logged-in user is a caregiver
     global current_caregiver
-    if current_caregiver is None:
-        print("Please login as a caregiver first!")
+    global current_patient
+    if not check_login('caregiver', current_patient, current_caregiver):
+        print("Please login as caregiver first!")
         return
 
     # check 2: the length for tokens need to be exactly 2 to include all information (with the operation name)
@@ -621,10 +649,31 @@ def upload_availability(tokens):
     year = int(date_tokens[2])
     try:
         d = datetime.datetime(year, month, day)
+        # Check if availability already there
+        try:
+            cm = ConnectionManager()
+            conn = cm.create_connection()
+        except:
+            print("Failed to create connection")
+            return
+        try:
+            select_availability = 'SELECT * FROM Availabilities WHERE Time=%s AND Username=%s'
+            with conn.cursor() as cursor:
+                cursor.execute(select_availability, (d, current_caregiver.username))
+                rows = cursor.fetchall()
+            if len(rows) == 1:
+                print("Availability already in system, upload new availability")
+                cm.close_connection()
+                return
+        except:
+            print("Failed to check availability")
+            cm.close_connection
+            return
         try:
             current_caregiver.upload_availability(d)
         except:
             print("Upload Availability Failed")
+            return
         print("Availability uploaded!")
     except ValueError:
         print("Please enter a valid date!")
@@ -703,6 +752,8 @@ def cancel(tokens):
                         cursor.execute(insert_availability, (date.strftime("%Y-%m-%d"), caregiver))
                 except:
                     print("Update Availability Failed")
+                    conn.rollback()
+                    cm.close_connection()
                     return
             except pymssql.Error as db_err:
                 print("Error occurred when uploading availability")
@@ -711,6 +762,9 @@ def cancel(tokens):
                 add_doses(['add_doses', vaccine, 1], override=True)
             except:
                 print("Failed to update doses!")
+                conn.rollback()
+                cm.close_connection()
+                return
     except pymssql.Error:
         print("Error while trying to retrieve appointment")
         cm.close_connection()
@@ -781,8 +835,9 @@ def add_doses(tokens, override=False):
     #  check 1: check if the current logged-in user is a caregiver
     if override is False:
         global current_caregiver
-        if current_caregiver is None:
-            print("Please login as a caregiver first!")
+        global current_patient
+        if not check_login('caregiver', current_patient, current_caregiver):
+            print("Please login as caregiver first!")
             return
 
     #  check 2: the length for tokens need to be exactly 3 to include all information (with the operation name)
@@ -876,20 +931,19 @@ def show_appointments():
             person = 'PATIENT        '
         elif name == 'c_username':
             person = 'CAREGIVER      '
-        # TODO: Refactor using Tabulate
         print("Appointments:")
-        print("+---------------+---------------+---------------+---------------+")
-        print(f"|APPOINTMENT ID |{person}|VACCINE        |DATE           |")
-        print("+---------------+---------------+---------------+---------------+")
+        headers = ["APPOINTMENT ID", person, "VACCINE", "DATE"]
+        # generating rows
         cols = ['appointment_id', name, 'vac_name', 'Time']
+        table = []
         for appointment in cursor.fetchall():
-            row = "|"
+            row = []
             for colname in cols:
                 val = str(appointment[colname])
-                spaces = ''.join(' ' for _ in range(15 - len(val)))
-                row += val + spaces + '|'
-            print(row)
-        print("+---------------+---------------+---------------+---------------+")
+                row.append(val)
+            table.append(row)
+        print(tabulate(table, headers, tablefmt="pretty"))
+
     except pymssql.Error:
         print("Error in retrieving appointments!")
 
@@ -1041,13 +1095,6 @@ def start():
 
 
 if __name__ == "__main__":
-    '''
-    // pre-define the three types of authorized vaccines
-    // note: it's a poor practice to hard-code these values, but we will do this ]
-    // for the simplicity of this assignment
-    // and then construct a map of vaccineName -> vaccineObject
-    '''
-
     # start command line
     print()
     print("+---------------------------------------------------------------------+")
